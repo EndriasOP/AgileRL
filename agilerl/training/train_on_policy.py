@@ -744,7 +744,7 @@ def train_on_policy_with_tensorboard(
                             total_steps
                         )
                     tb_writer.add_scalar(
-                        f'train/agent_{agent_idx}_fps', 
+                        f'train/agent_{agent_idx}_env_steps_per_sec', 
                         fps, 
                         total_steps
                     )
