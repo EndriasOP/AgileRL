@@ -811,21 +811,73 @@ def train_on_policy_with_tensorboard(
                 tb_writer.add_scalar('eval/min_fitness', np.min(fitnesses), total_steps)
                 tb_writer.add_scalar('eval/fitness_std', np.std(fitnesses), total_steps)
                 
-                # Log histograms for actions and values if available
+                # Log histograms for actions by dimension
                 if len(actions) > 0:
                     try:
-                        actions_tensor = torch.cat([a.flatten() for a in actions]) if isinstance(actions[0], torch.Tensor) else torch.tensor(actions).flatten()
-                        tb_writer.add_histogram('train/action_distribution', actions_tensor, total_steps)
-                    except:
-                        pass  # Skip if tensor operations fail
-                
+                        # Convert actions to tensor if needed
+                        if isinstance(actions[0], torch.Tensor):
+                            action_data = torch.stack(actions)
+                        else:
+                            action_data = torch.tensor(actions)
+                        
+                        # Get the shape of the action tensor
+                        action_shape = action_data.shape
+                        
+                        # For continuous actions with multiple dimensions
+                        if len(action_shape) >= 2:  # Actions have at least [batch, dim] shape
+                            # If actions are batched with shape [batch, action_dim]
+                            if len(action_shape) == 2:
+                                n_action_dims = action_shape[1]
+                                
+                                # Log histogram for each action dimension
+                                for dim in range(n_action_dims):
+                                    tb_writer.add_histogram(
+                                        f'actions/dim_{dim}',
+                                        action_data[:, dim].flatten(),
+                                        total_steps
+                                    )
+                                
+                            # If actions have more complex shape [batch, envs/agents, action_dim]
+                            elif len(action_shape) >= 3:
+                                # Reshape to combine batch and envs dimensions
+                                flattened_data = action_data.reshape(-1, action_shape[-1])
+                                n_action_dims = flattened_data.shape[1]
+                                
+                                # Log histogram for each action dimension
+                                for dim in range(n_action_dims):
+                                    tb_writer.add_histogram(
+                                        f'actions/dim_{dim}',
+                                        flattened_data[:, dim],
+                                        total_steps
+                                    )
+                        
+                            # For scalar discrete actions
+                            else:
+                                tb_writer.add_histogram(
+                                    'actions/discrete', 
+                                    action_data.flatten(),
+                                    total_steps
+                                )
+                            
+                            # Keep the original aggregate histogram for backward compatibility
+                            actions_tensor = action_data.flatten()
+                            tb_writer.add_histogram('train/action_distribution', actions_tensor, total_steps)
+                    except Exception as e:
+                        # If detailed logging fails, fall back to the original approach
+                        try:
+                            actions_tensor = torch.cat([a.flatten() for a in actions]) if isinstance(actions[0], torch.Tensor) else torch.tensor(actions).flatten()
+                            tb_writer.add_histogram('train/action_distribution', actions_tensor, total_steps)
+                        except:
+                            pass  # Skip if all tensor operations fail
+                        
+                # Log value distribution (keeping the original)
                 if len(values) > 0:
                     try:
                         values_tensor = torch.cat([v.flatten() for v in values]) if isinstance(values[0], torch.Tensor) else torch.tensor(values).flatten()
                         tb_writer.add_histogram('train/value_distribution', values_tensor, total_steps)
                     except:
                         pass  # Skip if tensor operations fail
-                
+                        
                 # Log individual agent fitness
                 for agent_idx, fitness in enumerate(fitnesses):
                     tb_writer.add_scalar(f'eval/agent_{agent_idx}_fitness', fitness, total_steps)
